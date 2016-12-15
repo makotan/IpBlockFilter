@@ -22,8 +22,8 @@ public class IpBlocker {
         long lastAccessTime;
         boolean useBlocking = false;
     }
-    private ConcurrentHashMap<String,IpBlockData> blockMap;
-    private Map<String,Long> ipMap;
+
+    private Map<String,IpBlockData> ipMap;
 
     protected long timeWindowMs;
     protected long blockingTime;
@@ -31,19 +31,22 @@ public class IpBlocker {
     protected BlockingStatus status;
 
     IpBlocker(long timeWindowMs, int count, BlockingStatus status, long blockingTime, int maxIpSize) {
-        blockMap = new ConcurrentHashMap<>();
+        this(timeWindowMs, count, status, blockingTime, maxIpSize,  (int)(maxIpSize * 0.2));
+
+    }
+    IpBlocker(long timeWindowMs, int count, BlockingStatus status, long blockingTime, int maxIpSize, int initSize) {
         this.timeWindowMs = timeWindowMs;
         this.blockingTime = blockingTime;
         this.count = count;
         this.status = status;
-        log.trace("timeWindowMs={}, blockingTime={}, count={}" , timeWindowMs, blockingTime, count);
+        log.trace("timeWindowMs={}, blockingTime={}, count={}, maxIpSize={}",
+                timeWindowMs, blockingTime, count, maxIpSize);
 
-        this.ipMap = Collections.synchronizedMap(new LRUMap<String,Long>(maxIpSize) {
-            protected boolean removeLRU(final LinkEntry<String,Long> entry) {
+        this.ipMap = Collections.synchronizedMap(new LRUMap<String,IpBlockData>(maxIpSize, initSize) {
+            protected boolean removeLRU(final LinkEntry<String,IpBlockData> entry) {
                 long time = currentTimeMs();
-                if ((time-entry.getValue()) > entry.getValue()) {
+                if ((time-entry.getValue().lastAccessTime) > entry.getValue().lastAccessTime) {
                     log.trace("remote block {}", entry.getKey());
-                    blockMap.remove(entry.getKey());
                     return true;
                 }
                 log.debug("no remove {}", entry.getKey());
@@ -53,9 +56,8 @@ public class IpBlocker {
     }
 
     public Optional<BlockingStatus> checkBlock(String remoteAddr) {
-        IpBlockData ibd = blockMap.computeIfAbsent(remoteAddr, this::createIpBlockData);
+        IpBlockData ibd = ipMap.computeIfAbsent(remoteAddr, this::createIpBlockData);
         long time = currentTimeMs();
-        this.ipMap.put(remoteAddr, time);
         //noinspection SynchronizationOnLocalVariableOrMethodParameter
         synchronized (ibd) {
             try {
@@ -84,7 +86,7 @@ public class IpBlocker {
     }
 
     public void calcBlock(String remoteAddr) {
-        IpBlockData ibd = blockMap.computeIfAbsent(remoteAddr, this::createIpBlockData);
+        IpBlockData ibd = ipMap.computeIfAbsent(remoteAddr, this::createIpBlockData);
         //noinspection SynchronizationOnLocalVariableOrMethodParameter
         synchronized (ibd) {
             ibd.timeQueue.add(currentTimeMs());
