@@ -97,6 +97,9 @@ public class IpBlocker {
     }
 
     protected boolean inTimeWindow(Long lastTime) {
+        if (lastTime == null || lastTime == 0L) {
+            return false;
+        }
         long blockCheckTime = currentTimeMs()-timeWindowMs;
         log.trace("in time window {} {}", blockCheckTime, lastTime);
         return blockCheckTime < lastTime;

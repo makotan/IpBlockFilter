@@ -5,6 +5,7 @@ import okhttp3.Response;
 import org.apache.catalina.Context;
 import org.apache.catalina.startup.Tomcat;
 import org.apache.tomcat.util.descriptor.web.FilterDef;
+import org.apache.tomcat.util.descriptor.web.FilterMap;
 import org.junit.Test;
 
 import javax.servlet.ServletException;
@@ -26,17 +27,27 @@ public class IpBlockTest extends BaseWebFilterTest {
         filterDef.setFilter(new IpBlockerFilter());
         filterDef.setFilterName("ipBlocker");
         context.addFilterDef(filterDef);
+        FilterMap filterMap = new FilterMap();
+        filterMap.addURLPattern("/*");
+        filterMap.setFilterName("ipBlocker");
+        context.addFilterMap(filterMap);
     }
 
     @Test
-    public void testCallGetDummy() throws IOException {
+    public void BlockTest() throws IOException, InterruptedException {
         String url = "http://localhost:" + getTomcatPort() + "/dummy";
         Request request = new Request.Builder()
                 .url(url)
                 .build();
 
+        for (int i = 0 ; i < 10 ; i++) {
+            Response response = client.newCall(request).execute();
+            assertThat(response.code()).isEqualTo(200);
+            assertThat(response.body().string()).isEqualTo("ok");
+            Thread.sleep(1L);
+        }
         Response response = client.newCall(request).execute();
-        assertThat(response.code()).isEqualTo(200);
-        assertThat(response.body().string()).isEqualTo("ok");
+        assertThat(response.code()).isEqualTo(403);
+
     }
 }
